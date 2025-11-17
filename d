@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="ar">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Kataflam - Spin The Wheel</title>
+<style>
+  :root{
+    --bg:#ffffff;
+    --title:#1b3cff;
+    --accent:#00d24a;
+    --darkrim:#0a0a0a;
+  }
+  html,body{height:100%;margin:0;font-family:Inter,Arial,Helvetica,sans-serif;background:#fff;}
+  .page { display:flex; flex-direction:column; align-items:center; gap:18px; padding:28px; }
+  h1{ margin:0; color:var(--title); font-size:34px; letter-spacing:1px; text-align:center; }
+  .stage { display:flex; gap:40px; align-items:center; justify-content:center; flex-wrap:wrap; }
+
+  /* Wheel container */
+  .wheel-card { background:#fff; padding:16px; border-radius:18px; box-shadow:0 14px 40px rgba(0,0,0,0.12); display:flex; flex-direction:column; align-items:center; }
+  .wheel-wrap { position:relative; width:360px; height:360px; display:flex; align-items:center; justify-content:center; }
+
+  canvas#wheel{ width:360px; height:360px; border-radius:50%; display:block; }
+
+  /* Outer rim */
+  .rim {
+    position:absolute; width:360px; height:360px; border-radius:50%;
+    box-shadow: 0 8px 22px rgba(0,0,0,0.25), inset 0 -20px 30px rgba(0,0,0,0.18);
+    pointer-events:none;
+  }
+
+  /* center pointer (like your image): droplet/arrow in center pointing up */
+  .center-pointer {
+    position:absolute; z-index:10; width:68px; height:68px;
+    left:50%; top:50%; transform:translate(-50%,-50%);
+    display:flex; align-items:center; justify-content:center;
+    pointer-events:none;
+  }
+  .center-pointer .outer {
+    width:68px;height:68px;border-radius:34px;background:#ffffff; box-shadow: 0 6px 18px rgba(0,0,0,0.18);
+    display:flex; align-items:center; justify-content:center;
+    transform: rotate(0deg);
+  }
+  .center-pointer .inner {
+    width:22px; height:22px; background:#ff4c4c; border-radius:50%;
+    box-shadow: 0 4px 10px rgba(255,76,76,0.45), inset 0 -4px 6px rgba(0,0,0,0.25);
+    position:relative;
+  }
+  /* small triangular notch to indicate direction (up) */
+  .center-pointer .notch {
+    position:absolute; top:-18px; width:0;height:0; border-left:12px solid transparent; border-right:12px solid transparent;
+    border-bottom:18px solid #ffffff; left:50%; transform:translateX(-50%); filter:drop-shadow(0 2px 4px rgba(0,0,0,0.2));
+  }
+
+  /* Spin button */
+  .controls { margin-top:12px; display:flex; gap:12px; width:100%; justify-content:center; }
+  .spin-btn { background:linear-gradient(180deg,#00c853,#00a94a); border:none; color:#fff; padding:12px 20px; border-radius:10px; font-weight:700; cursor:pointer; box-shadow:0 8px 20px rgba(0,169,74,0.18); }
+  .spin-btn:disabled { opacity:0.5; cursor:not-allowed; }
+
+  /* list under */
+  .legend { margin-top:12px; display:flex; gap:12px; flex-wrap:wrap; justify-content:center; }
+  .leg-item { display:flex; gap:8px; align-items:center; padding:6px 10px; border-radius:8px; background:#f6f9fb; color:#0b2540; font-weight:600; box-shadow:0 6px 18px rgba(11,37,64,0.03); }
+  .sw { width:28px; height:20px; border-radius:6px; }
+
+  /* result modal */
+  .modal { position:fixed; left:50%; top:50%; transform:translate(-50%,-50%); background:#fff; padding:16px 20px; border-radius:12px; box-shadow:0 30px 80px rgba(0,0,0,0.25); display:none; z-index:9999; text-align:center; }
+  .modal h3{ margin:8px 0; color:#0b2540; }
+  .modal p{ margin:6px 0 12px 0; font-weight:700; }
+  .ok { background:#0b7cff;color:#fff;padding:8px 14px;border-radius:8px;border:none; cursor:pointer; }
+
+  /* confetti canvas */
+  canvas#confetti{ position:fixed; left:0; top:0; width:100%; height:100%; pointer-events:none; display:none; z-index:999; }
+
+  @media(max-width:520px){
+    .wheel-wrap{ width:300px; height:300px; }
+    canvas#wheel{ width:300px; height:300px; }
+  }
+</style>
+</head>
+<body>
+  <div class="page">
+    <h1>عجلة الحظ - كاتافلام x WE	</h1>
+    <div class="wheel-card">
+      <div class="wheel-wrap">
+        <div class="center-pointer" aria-hidden="true">
+          <div style="width:56px;height:56px;border-radius:28px;background:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 18px rgba(0,0,0,0.12)">
+            <div style="width:16px;height:16px;border-radius:50%;background:#ff4c4c"></div>
+          </div>
+        </div>
+        <canvas id="wheel" width="720" height="720" aria-label="Prize wheel"></canvas>
+      </div>
+      <div class="controls"><button id="spinBtn" class="spin-btn">لف العجلة</button></div>
+      <div class="legend" id="legend"></div>
+      <div class="small">رقم التليفون: <span id="phoneDisplay">-</span></div>
+    </div>
+    <div class="modal" id="modal"><h3>🎉 مبروك!</h3><p id="modalPrize">فزت بـ ...</p><button class="ok" id="closeModal">حسناً</button></div>
+  </div>
+
+  <canvas id="confetti"></canvas>
+
+<script>
+/* CONFIG: ضع هنا رابط Web App بعد نشره */
+const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbyEJgf9EuWlfoiNJ3aasKmKxeBxgOhIr2s5oGaGZDW2ZeCh8oM8qjaaOJqAsmedRmR2Ng/exec";
+
+/* جوائز - عدّل كما تريد */
+const ITEMS = [
+  { label: "شحن مجاني" },
+  { label: "منتج مجاني" },
+  { label: "500 نقطة" },
+  { label: "خصم 10%" },
+  { label: "100 نقطة" },
+  { label: "قسيمة $20" }
+];
+
+const canvas = document.getElementById('wheel');
+const ctx = canvas.getContext('2d');
+const spinBtn = document.getElementById('spinBtn');
+const legend = document.getElementById('legend');
+const modal = document.getElementById('modal');
+const modalPrize = document.getElementById('modalPrize');
+const closeModal = document.getElementById('closeModal');
+const confettiCanvas = document.getElementById('confetti');
+const confettiCtx = confettiCanvas.getContext('2d');
+
+let W = canvas.width, H = canvas.height;
+let cx = W/2, cy = H/2, radius = Math.min(W,H)/2 - 12;
+const n = ITEMS.length;
+const anglePer = (2 * Math.PI) / n;
+let rotation = 0, spinning = false;
+
+/* Get phone from URL */
+const params = new URLSearchParams(window.location.search);
+const phone = params.get('phone') || '';
+document.getElementById('phoneDisplay').innerText = phone || '-';
+
+/* prevent multiple plays per phone using localStorage key per phone */
+function hasPlayed(phone){
+  if(!phone) return false;
+  try{ return localStorage.getItem('played_' + phone) === '1'; }catch(e){return false;}
+}
+function markPlayed(phone){
+  try{ localStorage.setItem('played_' + phone, '1'); }catch(e){}
+}
+
+/* render legend */
+function renderLegend(){
+  legend.innerHTML='';
+  const palette=["#0c8a3b","#050505","#00a86b","#ffea82","#00c2a8","#0a6b2b"];
+  for(let i=0;i<n;i++){
+    const box=document.createElement('div'); box.className='leg-item';
+    const sw=document.createElement('div'); sw.style.width='28px'; sw.style.height='20px'; sw.style.borderRadius='6px';
+    sw.style.background=palette[i%palette.length]; box.appendChild(sw);
+    const txt=document.createElement('div'); txt.textContent=ITEMS[i].label; box.appendChild(txt);
+    legend.appendChild(box);
+  }
+}
+
+/* draw wheel */
+function drawWheel(highlightIndex=-1){
+  ctx.clearRect(0,0,W,H);
+  ctx.save(); ctx.translate(cx,cy); ctx.rotate(rotation);
+  const palette=["#06c04a","#111111","#08d267","#1c1c1c","#00c57a","#0b0b0b"];
+  for(let i=0;i<n;i++){
+    const start=i*anglePer, end=start+anglePer;
+    const grad=ctx.createRadialGradient(Math.cos(start+anglePer/2)*radius*0.3, Math.sin(start+anglePer/2)*radius*0.3, radius*0.1, 0,0, radius);
+    const base=palette[i%palette.length];
+    grad.addColorStop(0, base); grad.addColorStop(1, shade(base,-12));
+    ctx.beginPath(); ctx.moveTo(0,0); ctx.arc(0,0, radius, start, end); ctx.closePath(); ctx.fillStyle=grad; ctx.fill();
+    ctx.lineWidth=(i===highlightIndex)?6:2; ctx.strokeStyle=(i===highlightIndex)?"rgba(255,255,255,0.95)":"rgba(0,0,0,0.35)"; ctx.stroke();
+    ctx.save();
+    const mid = start + anglePer/2; ctx.rotate(mid); ctx.translate(radius*0.55,0); ctx.rotate(Math.PI/2);
+    ctx.fillStyle="#fff"; ctx.font=`${Math.max(14,Math.floor(radius*0.065))}px Arial`; ctx.textAlign='center';
+    ctx.fillText(ITEMS[i].label, 0, 8);
+    ctx.restore();
+  }
+  ctx.beginPath(); ctx.arc(0,0, radius*0.18, 0, Math.PI*2); ctx.fillStyle="#0b0b0b"; ctx.fill();
+  ctx.restore();
+}
+
+/* spin */
+function spin(){
+  if(spinning) return;
+  if(!phone){ alert('رقم التليفون غير موجود في الرابط. افتح الرابط بصيغة ?phone=2011...'); return; }
+  if(hasPlayed(phone)){ alert('المستخدم ده لعب بالفعل.'); return; }
+  spinning = true; spinBtn.disabled = true;
+  const randIndex = Math.floor(Math.random()*n);
+  const centerAngle = (randIndex*anglePer)+anglePer/2;
+  const spins = Math.floor(Math.random()*5)+5;
+  const totalRotation = (-Math.PI/2 - centerAngle) + spins*2*Math.PI;
+  const duration = 6000; const start = performance.now();
+  function frame(now){
+    const elapsed = now - start; const t = Math.min(elapsed/duration,1); const eased = easeOutCubic(t);
+    rotation = totalRotation * eased; drawWheel();
+    if(t<1) requestAnimationFrame(frame);
+    else { drawWheel(randIndex); const prize = ITEMS[randIndex].label; onWin(prize); spinning=false; markPlayed(phone); }
+  }
+  requestAnimationFrame(frame);
+}
+
+/* on win */
+function onWin(prize){
+  modalPrize.textContent = prize; modal.style.display='block'; runConfetti(); saveResult(prize);
+}
+
+
+/* save result to Google Sheets */
+function saveResult(prize){
+  const params = new URLSearchParams(window.location.search); // يجيب رقم التليفون من الـ URL
+  const phone = params.get('phone') || 'unknown';            // لو مفيش رقم، يبقى unknown
+  fetch(WEB_APP_URL,{
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({
+      phone,                                // رقم التليفون
+      prize,                                // الجائزة اللي وقع عليها المستخدم
+      timestamp: new Date().toISOString()   // الوقت الحالي
+    })
+  })
+  .then(r => r.json().then(j => console.log('Saved', j))
+        .catch(() => console.log('Saved')))
+  .catch(e => console.error('Save failed', e));
+}
+
+
+
+/* confetti */
+function runConfetti(){
+  confettiCanvas.width=window.innerWidth; confettiCanvas.height=window.innerHeight; confettiCanvas.style.display='block';
+  const pieces=[]; const colors=["#0b7cff","#00c853","#ffcc33","#ff4c4c","#7b1fa2"];
+  for(let i=0;i<120;i++){ pieces.push({x:Math.random()*confettiCanvas.width,y:Math.random()*-confettiCanvas.height,r:(Math.random()*8)+4,color:colors[i%colors.length],tilt:Math.random()*10}); }
+  let t=0; function loop(){ confettiCtx.clearRect(0,0,confettiCanvas.width, confettiCanvas.height);
+    for(let i=0;i<pieces.length;i++){ const p=pieces[i]; p.y += 3 + Math.random()*3; p.tilt += 0.1; confettiCtx.save(); confettiCtx.translate(p.x,p.y); confettiCtx.rotate(p.tilt); confettiCtx.fillStyle=p.color; confettiCtx.fillRect(0,0,p.r,p.r*0.6); confettiCtx.restore(); }
+    t++; if(t<200) requestAnimationFrame(loop); else { confettiCanvas.style.display='none'; confettiCtx.clearRect(0,0,confettiCanvas.width,confettiCanvas.height); }
+  } loop();
+}
+
+/* helpers */
+function easeOutCubic(t){ return 1 - Math.pow(1 - t, 3); }
+function shade(hex, percent){ let f = parseInt(hex.slice(1),16), t = percent < 0 ? 0 : 255, p = Math.abs(percent)/100, R = f>>16, G = f>>8 & 0x00FF, B = f & 0x0000FF; return `rgb(${Math.round((t-R)*p)+R}, ${Math.round((t-G)*p)+G}, ${Math.round((t-B)*p)+B})`; }
+
+/* modal close */
+closeModal.addEventListener('click', ()=>{ modal.style.display='none'; });
+
+/* init */
+renderLegend(); drawWheel(); resize();
+function resize(){ const rect = canvas.getBoundingClientRect(); const DPR = window.devicePixelRatio || 1; W = Math.floor(rect.width*DPR); H = W; canvas.width=W; canvas.height=H; cx=W/2; cy=H/2; radius=Math.min(W,H)/2-12; drawWheel(); }
+window.addEventListener('resize', resize);
+spinBtn.addEventListener('click', spin);
+canvas.addEventListener('click', ()=>{ if(!spinBtn.disabled) spin(); });
+
+</script>
+</body>
+</html>
